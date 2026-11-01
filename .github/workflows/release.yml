@@ -8,6 +8,8 @@
 # 1. Check   — version, tag, package.json and changelog all agree; builds the notes
 # 2. Build   — on Windows, from the tag: installer, portable, latest.yml → draft release;
 #              the Microsoft Store package (.appx) is kept as a run artifact, not on GitHub
+#    Build macOS — on macOS, from the tag: Apple silicon and Intel disk images (.dmg)
+#              → the same draft release
 # 3. Publish — adds the notes and publishes (or keeps it a draft / marks it a pre-release)
 #
 # The Microsoft Store is a separate step afterwards: Actions → Microsoft Store
@@ -158,7 +160,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           npm run build
+          # Publish to the repository running this workflow (the same as
+          # package.json upstream; a fork's own releases otherwise).
           npx electron-builder --win nsis portable --publish always \
+            "-c.publish.owner=${GITHUB_REPOSITORY%%/*}" \
+            "-c.publish.repo=${GITHUB_REPOSITORY#*/}" \
             '-c.nsis.artifactName=Orfeo-Setup-${version}.${ext}' \
             '-c.portable.artifactName=Orfeo-${version}-portable.${ext}'
 
@@ -178,9 +184,54 @@ jobs:
           path: release/*.appx
           if-no-files-found: error
 
+  build-mac:
+    name: 2. Build macOS
+    needs: check
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Get the code of the tagged version
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      # The hand-engine check hashes handAssignment.ts with Windows line
+      # endings; the Windows job runs it. Here the app is built without it.
+      # The native sound engine is Windows-only for now, so macOS uses Studio.
+      - name: Build the app
+        run: |
+          npm run copyworklet
+          npx electron-vite build
+          mkdir -p native/build
+
+      # No Apple Developer certificate: the app is ad-hoc signed (mac.identity
+      # "-" in package.json) and not notarized, so macOS asks the user to
+      # confirm the first launch (right-click → Open). No auto-update on macOS.
+      - name: Build the disk images
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish never
+
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: gh release upload "$TAG" release/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+
   publish:
     name: 3. Publish
-    needs: [check, build]
+    needs: [check, build, build-mac]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

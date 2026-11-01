@@ -172,7 +172,9 @@ it.
 The workflow checks that the tag, `package.json` and the changelog agree,
 builds the installer (`Orfeo-Setup-X.Y.Z.exe`) and the portable app
 (`Orfeo-X.Y.Z-portable.exe`) on Windows from the tag, uploads them with
-`latest.yml` and the blockmap, writes the release notes from the changelog and
+`latest.yml` and the blockmap, builds the macOS disk images
+(`Orfeo-X.Y.Z-mac-arm64.dmg` for Apple silicon, `Orfeo-X.Y.Z-mac-x64.dmg` for
+Intel; ad-hoc signed, not notarized, no native engine and no auto-update yet), writes the release notes from the changelog and
 publishes the release as *Latest*. It also builds the Microsoft Store package
 (`Orfeo-X.Y.Z.appx`, from the same app folder) and keeps it with the run, for
 step 4.
