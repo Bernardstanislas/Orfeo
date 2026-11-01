@@ -31,6 +31,10 @@ on:
         description: "Test run: build everything but keep the release as a draft"
         type: boolean
         default: false
+      create_tag:
+        description: "Tag the branch you picked if the tag isn't on GitHub yet"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,6 +62,7 @@ jobs:
         id: version
         env:
           VERSION: ${{ inputs.version }}
+          CREATE_TAG: ${{ inputs.create_tag }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -68,6 +73,10 @@ jobs:
           fi
           TAG="v$VERSION"
 
+          if [ "$CREATE_TAG" = "true" ] && ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "Tagging $GITHUB_SHA ($GITHUB_REF_NAME) as $TAG."
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$GITHUB_SHA" > /dev/null
+          fi
           if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
             echo "::error::Tag $TAG is not on GitHub yet. Run /release to tag the release and push the tag, then run this again."
             exit 1
